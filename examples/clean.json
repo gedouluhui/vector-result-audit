@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "metric": "l2",
+  "score_kind": "squared_l2",
+  "k": 2,
+  "min_recall": 1.0,
+  "corpus": [
+    {
+      "id": "closest",
+      "vector": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tie-east",
+      "vector": [
+        1,
+        0
+      ]
+    },
+    {
+      "id": "tie-west",
+      "vector": [
+        -1,
+        0
+      ]
+    },
+    {
+      "id": "filtered",
+      "vector": [
+        0,
+        0.25
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "synthetic-valid-tie",
+      "vector": [
+        0,
+        0
+      ],
+      "eligible_ids": [
+        "closest",
+        "tie-east",
+        "tie-west"
+      ],
+      "results": [
+        {
+          "id": "closest",
+          "score": 0
+        },
+        {
+          "id": "tie-west",
+          "score": 1
+        }
+      ]
+    }
+  ]
+}

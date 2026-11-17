@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vector-result-audit"
+version = "0.1.0"
+description = "Offline contracts and evidence for dense-vector retrieval results"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "gedouluhui"}]
+keywords = ["vector-search", "retrieval", "recall", "testing", "rag"]
+classifiers = ["Programming Language :: Python :: 3", "Operating System :: OS Independent", "License :: OSI Approved :: MIT License"]
+dependencies = []
+
+[project.scripts]
+vector-audit = "vector_result_audit.cli:main"
+
+[tool.setuptools]
+packages = ["vector_result_audit"]
