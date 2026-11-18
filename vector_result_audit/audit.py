@@ -3,7 +3,7 @@ from .schema import DEFAULT_MAX_WORK, validate_snapshot
 from .distance import reference, NUMERICAL_POLICY
 from .context import context_fingerprint
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 RANK_POLICY = "exhaustive binary64; exact rank-value ties; cosine ranked by negative direct similarity; score tolerance does not change ranks"
 
 
