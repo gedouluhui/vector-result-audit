@@ -8,3 +8,7 @@ dist/
 .superpowers/
 docs/superpowers/
 *.log
+ci-evidence/
+engine-evidence/
+audit-demo/
+engine-demo/

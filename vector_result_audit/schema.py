@@ -74,7 +74,8 @@ def validate_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
     """Return a canonical private copy; reject unsupported inputs, never sample."""
     _integer(max_work, "max_work", 1, 10**15)
     _fields(data, {"schema_version", "metric", "k", "corpus", "queries"},
-            {"score_kind", "score_atol", "score_rtol", "min_recall", "allow_null_padding"}, "snapshot")
+            {"score_kind", "score_atol", "score_rtol", "min_recall", "allow_null_padding",
+             "require_scores", "require_sorted"}, "snapshot")
     _integer(data["schema_version"], "schema_version", 1, 1)
     metric = data["metric"]
     if not isinstance(metric, str) or metric not in SCORE_KINDS:
@@ -91,8 +92,19 @@ def validate_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
     padding = data.get("allow_null_padding", False)
     if type(padding) is not bool:
         raise InputError("allow_null_padding: expected boolean")
+    policies = {key: data.get(key, False) for key in ("require_scores", "require_sorted")}
+    for key, value in policies.items():
+        if type(value) is not bool:
+            raise InputError(f"{key}: expected boolean")
+    if policies["require_scores"] and kind is None:
+        raise InputError("require_scores needs an explicit score_kind")
     raw_corpus = _list(data["corpus"], "corpus", 1)
     raw_queries = _list(data["queries"], "queries", 1, 10000)
+    _fields(raw_corpus[0], {"id", "vector"}, set(), "corpus[0]")
+    dimension = len(_list(raw_corpus[0]["vector"], "corpus[0].vector", 1, 4096))
+    work = len(raw_corpus) * len(raw_queries) * dimension
+    if work > max_work:
+        raise InputError(f"work budget exceeded: {work} scalar comparisons requested, limit {max_work}; no audit performed")
     # Budget report expansion before copying result dictionaries or building evidence.
     result_rows, evidence_rows = 0, len(raw_queries)
     for i, item in enumerate(raw_queries):
@@ -107,7 +119,7 @@ def validate_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
             raise InputError(f"total result rows exceed {MAX_RESULT_ROWS}; no audit performed")
         if evidence_rows > MAX_EVIDENCE_ROWS:
             raise InputError(f"evidence rows exceed {MAX_EVIDENCE_ROWS} (queries + returned rows + reference top-k); no audit performed")
-    corpus, known, dimension = [], set(), None
+    corpus, known = [], set()
     for i, item in enumerate(raw_corpus):
         path = f"corpus[{i}]"
         _fields(item, {"id", "vector"}, set(), path)
@@ -118,9 +130,6 @@ def validate_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
         dimension = len(vector)
         known.add(identifier)
         corpus.append({"id": identifier, "vector": vector})
-    work = len(corpus) * len(raw_queries) * dimension
-    if work > max_work:
-        raise InputError(f"work budget exceeded: {work} scalar comparisons requested, limit {max_work}; no audit performed")
     queries, query_ids = [], set()
     for i, item in enumerate(raw_queries):
         path = f"queries[{i}]"
@@ -152,7 +161,7 @@ def validate_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
         queries.append({"id": identifier, "vector": vector, "eligible_ids": eligible, "results": rows})
     return {"schema_version": 1, "metric": metric, "k": k, "score_kind": kind,
             "score_atol": atol, "score_rtol": rtol, "min_recall": minimum,
-            "allow_null_padding": padding, "corpus": corpus, "queries": queries}
+            "allow_null_padding": padding, **policies, "corpus": corpus, "queries": queries}
 
 
 def _unique_object(pairs):

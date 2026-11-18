@@ -1,0 +1,5 @@
+# Optional integration test environment only; not runtime dependencies.
+# Tested on Python 3.12. Qdrant runs in local memory mode, no server.
+faiss-cpu==1.16.0
+qdrant-client==1.20.0
+numpy==2.5.5

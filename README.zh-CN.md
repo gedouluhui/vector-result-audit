@@ -1,12 +1,10 @@
-# Vector Result Audit：向量检索结果验收
+# Vector Result Audit：向量检索结果与回归验收
 
-给定本地语料／查询向量、距离定义、过滤资格和原始返回序列，独立核查重复 ID、过滤外 ID、分数编码错误以及用户声明的召回要求。无需模型、数据库连接、API key 或运行时第三方依赖。
+检查真实检索结果里的重复／未知ID、过滤外数据、距离编码错误、缺失分数、排序错误，以及两次运行的逐查询退化。核心零第三方运行时依赖，不要API key，不下载模型，报告全部在本地。
 
-它不是新向量数据库，不评判回答质量；精确检索、recall 和并列处理也不是本项目发明。定位是可随测试或问题报告携带的**离线结果证据**。
+## 先跑起来
 
-## 一分钟运行
-
-Python 3.10+，在源码目录运行：
+Python3.10+，源码目录执行：
 
 ```sh
 python -m pip install .
@@ -14,24 +12,36 @@ vector-audit demo --out audit-demo
 vector-audit check audit-demo/broken.json --json findings.json --html findings.html
 ```
 
-打开 `audit-demo/broken.html`。示例完全自制、明确标为 synthetic，并由真实检查器生成报告；不是来自某数据库的事故记录。最后一条命令预期退出 **1**，因为输入故意带错。
+打开HTML。故意错误样例返回1是预期结果。退出0=声明检查通过；1=发现合同违规／预算不达标／回归；2=输入不可比、预算超限或输出错误。
 
-- 退出 0：声明过的检查通过；未设置 `min_recall` 不代表召回质量通过。
-- 退出 1：发现结果合同违规，或低于声明的召回阈值。
-- 退出 2：输入／预算／输出错误，不能计算或完成验收。
+## v0.2新增的实际用途
 
-## 一个容易漏掉的反例
+- **真实库入口**：Faiss和Qdrant的结果转换，不猜ID、不偷偷去重或重排。Faiss平方L2与Qdrant普通L2明确区分，-1占位保留原位置。
+- **两次运行比较**：`vector-audit compare before.json after.json --html regression.html`。先证明语料、查询、资格、metric/k和策略相同，再比较；不静默取交集，不让平均提升掩盖单查询退化。
+- **显式验收意图**：`require_scores`要求非占位行有分数；`require_sorted`检查参考排名顺序与尾部padding，默认均false以兼容旧输入。
+- **直接定位证据**：报告列出缺失的严格更近邻居ID、完整数值、查询／行锚点和score已查／缺失数量。
+- **数值与I/O修复**：cosine分数不再经1−距离反算丢失微小值；缩放归一化支持次正规数；计算预算在语料复制前拒绝；stdout追加到输入的别名被拦截，断管道返回2不冒充通过。
 
-三个合法邻居距离是 0、1、1，要求 top-2。如果返回后两个，不能因为它们都在第 2 名距离内就算满分；漏掉更近的第一个，tie-aware recall 应是 **0.5**。正常返回第一个加任一个边界并列点才是 1。
+三个邻居距离0、1、1，要top2却返回后两个，召回是0.5而非1；另一种合法边界并列项不能被误报成缺失。
 
-## 重要边界
+## 运行真实库对照
 
-`eligible_ids: null` 表示全部语料；空列表表示没有合法候选。过滤名单由调用方提供，不是工具自己证明的权限真值。空候选的 recall 是 N/A，不写成 1。缺少分数的行明确保留“未核验”；近似检索没达到满召回不自动等于 bug。
+独立Python3.12环境中：
 
-计算穷举使用 Python binary64，名次并列只认算得的距离严格相等；分数容差不改变名次。支持单个稠密向量的 L2、内积、cosine；不支持量化分数认证、混合检索、重排或线上数据库适配。
+```sh
+python -m pip install -r integrations/requirements.txt
+python -m unittest discover -s integrations -v
+python -m examples.engine_capture --out engine-demo
+```
 
-默认 UTF-8 JSON 上限 32 MiB，距离计算预算为 5,000,000 个标量比较，不静默抽样。通过 `--max-work` 显式调整计算预算；另限制所有查询累计返回行最多 10,000，查询数＋返回行＋展示的参考 top-k 行最多 20,000，在复制结果及构造报告之前拒绝超限。文件／计算／证据行上限不是全进程内存保证。报告保留 ID 与分数，分享前自行脱敏；不复制原始向量。
+示例实际运行Faiss CPU IndexFlat及Qdrant-client内存模式，生成可比的baseline/candidate和报告。错误是明确标注的人工导出／应用层错误注入；不伪装上游数据库漏洞。**Qdrant本地模式不等于服务器验证，IndexFlat不等于ANN性能验证。** 详见[集成说明](docs/integrations.md)。
 
-只安装单个报告时采用原子写入，多份报告不是文件系统事务；未提供 `--force` 不覆盖已有文件，即使提供也不许覆盖输入或它的别名。完整输入格式、测试方法、竞品边界和输出限制见 [英文说明](README.md) 与 [数值合同](docs/contract.md)。
+## 不夸大的边界
 
-本项目是 AI 辅助开发的原创工程实现，不声明算法首创、已有人采用、性能提升或能获得固定数量 Star。MIT 许可。
+资格名单和快照由调用方提供，工具不证明ACL实现、最新性、完整性、语义相关性或RAG答案质量。空资格集recall是N/A；未设置min_recall的PASS不保证召回质量；score缺失默认仍是未核验。
+
+v0.2报告schema为2，输入schema仍为1。cosine按负的直接相似度排名，display distance仍是1−similarity；两者不混用，score容差不合并名次。不是实数精确证明。
+
+CLI输入默认32MiB，n×q×d预算500万，累计结果1万行，总查询＋结果＋参考证据2万行；compare两侧分别限额，不是全进程RSS保证。输出文件／stdout都不能指向输入，但shell的 `>` 会在程序启动前截断文件，工具无法倒退恢复。详细安全边界见[英文README](README.md)和[合同](docs/contract.md)。
+
+核心及集成测试、错误注入和实际制品均须真实验证；发布后的远程CI以真实回执为准。没有宣称世界第一、算法首创、已有外部用户或固定Star数量。MIT许可，AI辅助工程实现。

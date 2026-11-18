@@ -1,7 +1,9 @@
 include LICENSE README.md README.zh-CN.md
-include docs/contract.md
+include docs/contract.md docs/integrations.md docs/verification.md docs/index.html
 include scripts/mutation_check.py
-recursive-include examples *.json
+recursive-include scripts *.py
+recursive-include examples *.json *.py
+recursive-include integrations *.py *.txt
 recursive-include tests *.py
 prune .local
 prune docs/superpowers
