@@ -39,7 +39,7 @@ python -m scripts.build_demo --out docs/index.html --check
 
 ## CI evidence, not badges as proof
 
-The checked-in workflow runs the zero-dependency suite and wheel smoke on Ubuntu/Windows with Python3.10/3.12, plus separate pinned real-engine jobs on Python3.12. Official actions are pinned to inspected commit IDs. JSON/HTML control artifacts are uploaded even if a previous test failed; failed gate exit codes are not swallowed. Remote completion is only established by the actual [Actions run](https://github.com/gedouluhui/vector-result-audit/actions) for the published commit, not by this document or workflow syntax.
+The checked-in workflow runs the zero-dependency suite and wheel smoke on Ubuntu/Windows with Python3.10/3.12, plus separate pinned real-engine jobs on Python3.12. Official actions are pinned to inspected commit IDs. JSON/HTML control artifacts are uploaded even if a previous test failed; failed gate exit codes are not swallowed. Remote completion is only established by the actual Actions run for the published commit. The current [v0.2.2 release](https://github.com/gedouluhui/vector-result-audit/releases/tag/v0.2.2) at commit `cec530c` succeeded in tag run [44412477762](https://github.com/gedouluhui/vector-result-audit/actions/runs/44412477762) and main run [44412461794](https://github.com/gedouluhui/vector-result-audit/actions/runs/44412461794). The 0.2.1 runs failed because the workflow still named the 0.2.0 wheel after a version bump; 0.2.2 discovers the built wheel from `dist/`.
 
 ## What these checks do not establish
 
