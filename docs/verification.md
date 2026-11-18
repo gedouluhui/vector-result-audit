@@ -28,7 +28,7 @@ Two independent pre-implementation read-only audits provided reproducible findin
 ```sh
 python -m pip install build
 python -m build
-python scripts/smoke_wheel.py dist/vector_result_audit-0.2.0-py3-none-any.whl
+python scripts/smoke_wheel.py dist/vector_result_audit-0.2.2-py3-none-any.whl
 ```
 
 The smoke script creates a fresh venv outside the repository, removes PYTHONPATH/PYTHONHOME, installs only the selected wheel with `--no-index --no-deps`, runs its console/module commands and checks an actual -0.5 comparison delta and generated HTML. It does not install the optional engines or test against an editable checkout. A bad wheel or wrong exit status fails the verifier. As a negative control, running the new verifier on the preserved v0.1.0 wheel failed at the real missing `compare` command (expected exit1, observed exit2); the v0.2 wheel completed the same workflow. The publicly generated example has a byte-for-byte `--check` mode to reject a stale preview:

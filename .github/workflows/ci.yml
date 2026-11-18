@@ -22,7 +22,7 @@ jobs:
       - run: python scripts/mutation_check.py
       - run: python -m scripts.build_demo --out docs/index.html --check
       - run: python -m build
-      - run: python scripts/smoke_wheel.py dist/vector_result_audit-0.2.0-py3-none-any.whl
+      - run: python -c "import glob,subprocess,sys; subprocess.run([sys.executable,'scripts/smoke_wheel.py',*glob.glob('dist/*.whl')],check=True)"
       - name: Preserve real PASS FAIL ERROR evidence
         if: always()
         run: python scripts/ci_evidence.py --out ci-evidence
