@@ -1,5 +1,7 @@
 # Vector Result Audit
 
+[![CI](https://github.com/gedouluhui/vector-result-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/gedouluhui/vector-result-audit/actions/workflows/ci.yml)
+
 **Catch a broken retrieval export before it becomes a RAG regression.**
 
 Offline contracts for dense-vector search: explicit filtering, score encodings, result order, missing-neighbor evidence, and **before/after comparisons that refuse incomparable datasets**.
