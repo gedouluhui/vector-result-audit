@@ -151,3 +151,34 @@ python -m unittest discover -s integrations -v
 Core tests include actual subprocess I/O failures and an independent Fraction/optimal-set oracle. Mutation tests operate on disposable copies and refuse crashes as evidence of catching a bug. Actual library tests do not silently skip missing engines. See [v0.2 verification notes](docs/verification.md) for what was and was not measured.
 
 Useful contributions start with a minimal non-private snapshot, expected contract and evidence. Never submit production credentials, raw private exports, or unsupported claims of upstream defects. Original code: MIT. AI-assisted implementation; no algorithm-originality, universal speedup, external-adoption or star-growth claims.
+
+## Quickstart and support
+
+### Problem
+Catch broken dense-vector retrieval exports and incomparable before/after runs before they become RAG regressions.
+
+### Install
+```sh
+python -m pip install .
+```
+
+### Success
+```sh
+vector-audit demo --out audit-demo && vector-audit check audit-demo/clean.json
+```
+Expected: The clean snapshot satisfies its declared checks and exits 0.
+
+### Deliberate failure
+```sh
+vector-audit check audit-demo/broken.json
+```
+Expected: The synthetic broken snapshot produces findings and exits 1.
+
+### Evidence and coverage boundaries
+Evidence includes core subprocess tests, an independent Fraction/optimal-set oracle, mutation checks, clean package installation, and separately pinned Faiss/Qdrant integration runs. Coverage is limited to declared offline snapshot contracts; it cannot prove export completeness, ACL correctness, embedding relevance, ANN quality, or production performance.
+
+### Support status
+Version 0.2.2 supports Python 3.10+. The core has no runtime dependencies; optional engine integrations use their own pinned environment. The documented distribution route is source or GitHub release assets, with no PyPI availability claim. Maintenance is best-effort with no SLA.
+
+### Limitations
+Default CLI input is capped at 32 MiB with explicit scalar/row budgets. Sparse, hybrid, multivector, reranked retrieval, quantized-score certification, and live service behavior are outside scope. Reports can contain IDs, scores, and findings and must be reviewed before sharing.
