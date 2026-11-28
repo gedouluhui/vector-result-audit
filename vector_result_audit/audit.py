@@ -1,25 +1,62 @@
-"""Raw-sequence contract checks with strict-neighbor-preserving tie credit."""
+"""Bounded top-k contract checks with strict-neighbor-preserving tie credit."""
+import heapq
 from .schema import DEFAULT_MAX_WORK, validate_snapshot
 from .distance import reference, NUMERICAL_POLICY
 from .context import context_fingerprint
 
 VERSION = "0.2.2"
-RANK_POLICY = "exhaustive binary64; exact rank-value ties; cosine ranked by negative direct similarity; score tolerance does not change ranks"
+RANK_POLICY = "exhaustive binary64 with bounded top-k evidence; exact rank-value ties; cosine ranked by negative direct similarity; score tolerance does not change ranks"
 
 
 def _query(data, query):
     k, metric = data["k"], data["metric"]
-    references = {item["id"]: reference(query["vector"], item["vector"], metric, data["score_kind"])
-                  for item in data["corpus"]}
-    distances = {rid: values[0] for rid, values in references.items()}
-    ranks = {rid: values[1] for rid, values in references.items()}
-    eligible = set(distances) if query["eligible_ids"] is None else set(query["eligible_ids"])
-    ordered = sorted((rid for rid in distances if rid in eligible), key=ranks.__getitem__)
-    m = min(k, len(eligible))
-    threshold = ranks[ordered[m - 1]] if m else None
-    strict = {rid for rid in eligible if ranks[rid] < threshold} if m else set()
-    boundary = {rid for rid in eligible if ranks[rid] == threshold} if m else set()
-    gaps = [abs(d - threshold) for rid, d in ranks.items() if rid in eligible and d != threshold] if m else []
+    # Retain at most k eligible candidates. The corpus index is the canonical
+    # stable tie breaker used by the previous exhaustive sorted implementation.
+    top = []
+    references = {}
+    returned_ids = {row["id"] for row in query["results"]}
+    eligible = set(query["eligible_ids"]) if query["eligible_ids"] is not None else None
+    eligible_count = len(data["corpus"]) if eligible is None else len(eligible)
+    distinct_ranks = set()
+    rank_heap = []
+    scalar_work = 0
+    for index, item in enumerate(data["corpus"]):
+        rid = item["id"]
+        values = reference(query["vector"], item["vector"], metric, data["score_kind"])
+        scalar_work += len(item["vector"])
+        if rid in returned_ids:
+            references[rid] = values
+        if eligible is not None and rid not in eligible:
+            continue
+        distance, rank, _ = values
+        # At most k items can precede the kth rank, so k+1 distinct values
+        # suffice to retain the first rank strictly above a tied boundary.
+        if rank not in distinct_ranks:
+            distinct_ranks.add(rank)
+            heapq.heappush(rank_heap, -rank)
+            if len(distinct_ranks) > k + 1:
+                distinct_ranks.remove(-heapq.heappop(rank_heap))
+        # Negative keys make the worst retained candidate the heap root.
+        candidate = (-rank, -index, rid, distance)
+        if len(top) < k:
+            heapq.heappush(top, candidate)
+        elif (rank, index) < (-top[0][0], -top[0][1]):
+            heapq.heapreplace(top, candidate)
+    ordered = sorted(top, key=lambda item: (-item[0], -item[1]))
+    m = min(k, eligible_count)
+    threshold = -ordered[m - 1][0] if m else None
+    strict = {item[2] for item in ordered[:m] if -item[0] < threshold} if m else set()
+    # The nearest non-boundary ranks are the closest strict predecessor and
+    # the first retained distinct rank above the threshold. No list of all
+    # distances is needed, even when the boundary contains many ties.
+    gaps = []
+    if m:
+        strict_ranks = [-item[0] for item in ordered[:m] if -item[0] < threshold]
+        if strict_ranks:
+            gaps.append(abs(max(strict_ranks) - threshold))
+        successors = [rank for rank in distinct_ranks if rank > threshold]
+        if successors:
+            gaps.append(abs(min(successors) - threshold))
     findings, observations, evidence = [], [], []
 
     def finding(code, row, detail):
@@ -38,8 +75,8 @@ def _query(data, query):
         declared_placeholder = rid is None and data["allow_null_padding"] and score is None
         if index < k and not declared_placeholder:
             denominator += 1
-        ref = distances.get(rid)
-        is_eligible = rid in eligible
+        ref = references.get(rid, (None, None, None))[0]
+        is_eligible = eligible is None or rid in eligible
         creditable = index < k and is_eligible and rid not in seen
         expected = error = None
         if rid is None:
@@ -52,14 +89,14 @@ def _query(data, query):
             if data["require_sorted"]:
                 if padding_seen:
                     finding("non_trailing_padding", index, "real result follows a null placeholder")
-                if rid in ranks:
-                    current_rank = ranks[rid]
+                if rid in references:
+                    current_rank = references[rid][1]
                     if previous_rank is not None and current_rank < previous_rank:
                         finding("out_of_order", index, f"rank value {current_rank!r} is better than row {previous_row} value {previous_rank!r}")
                     previous_rank, previous_row = current_rank, index
             if rid in seen:
                 finding("duplicate_id", index, f"ID {rid!r} already occurred in this returned sequence")
-            if rid not in distances:
+            if rid not in references:
                 finding("unknown_id", index, f"ID {rid!r} is absent from the declared corpus")
             elif not is_eligible:
                 finding("ineligible_id", index, f"ID {rid!r} is outside this query's eligibility set")
@@ -77,12 +114,12 @@ def _query(data, query):
                 if data["require_scores"]:
                     finding("missing_score", index, "non-placeholder result requires a numeric score")
         evidence.append({"row": index, "id": rid, "score": score, "reference_distance": ref,
-                         "rank_value": ranks.get(rid),
+                         "rank_value": references[rid][1] if rid in references else None,
                          "expected_score": expected, "score_error": error, "eligible": is_eligible,
                          "within_k": index < k, "counted_unique_eligible": creditable,
                          "declared_placeholder": declared_placeholder})
     strict_hits = len(counted & strict)
-    boundary_hits = min(len(counted & boundary), m - len(strict))
+    boundary_hits = min(sum(rid in references and references[rid][1] == threshold for rid in counted), m - len(strict)) if m else 0
     hits = strict_hits + boundary_hits
     recall = hits / m if m else None
     precision = hits / denominator if denominator else None
@@ -90,17 +127,19 @@ def _query(data, query):
         observations.append("underfilled")
     if data["min_recall"] is not None and recall is not None and recall < data["min_recall"]:
         finding("recall_budget", None, f"recall {recall!r} is below declared minimum {data['min_recall']!r}; this is a quality budget, not automatically an engine bug")
-    missing = [rid for rid in ordered[:m] if rid in strict and rid not in counted]
-    return {"id": query["id"], "eligible_count": len(eligible), "effective_k": m,
-            "reference_top_k": [{"id": rid, "distance": distances[rid], "rank_value": ranks[rid],
-                                 "strict": rid in strict, "returned": rid in counted} for rid in ordered[:m]],
+    missing = [item for item in ordered[:m] if item[2] in strict and item[2] not in counted]
+    top_k = [{"id": rid, "distance": distance, "rank_value": -negative_rank,
+              "strict": rid in strict, "returned": rid in counted}
+             for negative_rank, _, rid, distance in ordered[:m]]
+    return {"id": query["id"], "eligible_count": eligible_count, "effective_k": m,
+            "reference_top_k": top_k,
             "missing_strict_count": len(missing),
-            "missing_strict_witnesses": [{"id": rid, "distance": distances[rid], "rank_value": ranks[rid]} for rid in missing[:5]],
-            "boundary_distance": distances[ordered[m - 1]] if m else None,
-            "boundary_rank_value": threshold, "boundary_gap": min(gaps) if gaps else None,
+            "missing_strict_witnesses": [{"id": item[2], "distance": item[3], "rank_value": -item[0]} for item in missing[:5]],
+            "boundary_distance": ordered[m - 1][3] if m else None, "boundary_rank_value": threshold, "boundary_gap": min(gaps) if gaps else None,
             "strict_neighbor_count": len(strict), "strict_hits": strict_hits, "boundary_hits": boundary_hits,
             "hits": hits, "recall": recall, "precision": precision,
             "score_checked_rows": score_checked, "score_missing_rows": score_missing,
+            "scalar_work": scalar_work,
             "findings": findings, "observations": observations, "rows": evidence}
 
 
@@ -120,7 +159,7 @@ def audit_snapshot(data, *, max_work=DEFAULT_MAX_WORK):
                          "score_atol": data["score_atol"], "score_rtol": data["score_rtol"],
                          "score_checked_rows": sum(q["score_checked_rows"] for q in queries),
                          "score_missing_rows": sum(q["score_missing_rows"] for q in queries),
-                         "scalar_work": len(data["corpus"]) * len(data["queries"]) * len(data["corpus"][0]["vector"]),
+                         "scalar_work": sum(q["scalar_work"] for q in queries),
                          "limitations": ["Only the supplied snapshot and eligibility lists are checked.",
                                          "Exhaustive binary64 is not exact real-number arithmetic; near ties may differ across implementations.",
                                          "Without min_recall, PASS checks protocol and declared scores only.",
