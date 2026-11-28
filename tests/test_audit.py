@@ -142,6 +142,14 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(q["boundary_distance"], 1.0)
         self.assertEqual(q["boundary_gap"], 1.0)
 
+    def test_boundary_gap_uses_nearest_rank_above_tied_threshold(self):
+        data = snapshot([], k=4)
+        data["corpus"] = [{"id": str(i), "vector": [value]}
+                          for i, value in enumerate((0, 1, 1, 1, 1.5, 2))]
+        q = self.query(data)
+        self.assertEqual(q["boundary_rank_value"], 1.0)
+        self.assertEqual(q["boundary_gap"], 0.5)
+
 
 class SchemaTests(unittest.TestCase):
     def test_unknown_keys_rejected(self):
