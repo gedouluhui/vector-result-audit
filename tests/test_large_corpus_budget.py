@@ -11,11 +11,11 @@ from vector_result_audit.schema import validate_snapshot
 
 def make_snapshot(corpus_size=20000, dimensions=4, k=10):
     """A deterministic corpus whose IDs are unique but whose vectors repeat."""
-    vectors = (
-        (1.0, 0.0, 0.0, 0.0),
-        (0.0, 1.0, 0.0, 0.0),
-        (0.0, 0.0, 1.0, 0.0),
-        (0.0, 0.0, 0.0, 1.0),
+    if dimensions < 1:
+        raise ValueError("dimensions must be positive")
+    vectors = tuple(
+        tuple(1.0 if axis == index else 0.0 for axis in range(dimensions))
+        for index in range(dimensions)
     )
     return {
         "schema_version": 1,
@@ -23,7 +23,7 @@ def make_snapshot(corpus_size=20000, dimensions=4, k=10):
         "k": k,
         "corpus": [{"id": f"doc-{i}", "vector": list(vectors[i % len(vectors)])}
                    for i in range(corpus_size)],
-        "queries": [{"id": "q", "vector": [1.0, 0.0, 0.0, 0.0],
+        "queries": [{"id": "q", "vector": [1.0] + [0.0] * (dimensions - 1),
                      "eligible_ids": None, "results": []}],
     }
 
